@@ -1,5 +1,5 @@
 ﻿name: 🌐 Web Builds
-on: [ workflow_call, workflow_dispatch ]
+on: [ pull_request, workflow_call, workflow_dispatch ]
 
 
 jobs:
