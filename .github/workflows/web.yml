@@ -11,7 +11,8 @@ jobs:
       matrix:
         platform: [web]
         target: [debug, release]
-        threads: [yes, no]
+        threads: [no]
+        #threads: [yes, no]
 
     steps:
       - name: Set up Emscripten latest
@@ -53,8 +54,6 @@ jobs:
       - name: Prepare Files
         shell: sh
         run: |
-          ls -l project/addons/terrain_3d/bin/
-          strip project/addons/terrain_3d/bin/libterrain.*
           ls -l project/addons/terrain_3d/bin/
           cp '${{ github.workspace }}/README.md' '${{ github.workspace }}/LICENSE.txt' ${{ github.workspace }}/project/addons/terrain_3d/
 
