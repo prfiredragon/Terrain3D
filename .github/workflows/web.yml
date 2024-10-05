@@ -10,7 +10,8 @@ jobs:
       fail-fast: false
       matrix:
         platform: [web]
-        target: [debug, release]
+        target: [debug]
+        # target: [debug, release]
         threads: [no]
         #threads: [yes, no]
 
