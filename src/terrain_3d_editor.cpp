@@ -104,6 +104,10 @@ void Terrain3DEditor::_operate_map(const Vector3 &p_global_position, const real_
 		return;
 	}
 
+	bool modifier_alt = _brush_data["modifier_alt"];
+	bool modifier_ctrl = _brush_data["modifier_ctrl"];
+	//bool modifier_shift = _brush_data["modifier_shift"];
+
 	Ref<Image> brush_image = _brush_data["brush_image"];
 	if (brush_image.is_null()) {
 		LOG(ERROR, "Invalid brush image. Returning");
@@ -136,6 +140,7 @@ void Terrain3DEditor::_operate_map(const Vector3 &p_global_position, const real_
 	bool enable_texture = _brush_data["enable_texture"];
 	int asset_id = _brush_data["asset_id"];
 
+	Vector2 slope_range = _brush_data["slope"];
 	bool enable_angle = _brush_data["enable_angle"];
 	bool dynamic_angle = _brush_data["dynamic_angle"];
 	real_t angle = _brush_data["angle"];
@@ -145,7 +150,6 @@ void Terrain3DEditor::_operate_map(const Vector3 &p_global_position, const real_
 
 	real_t gamma = _brush_data["gamma"];
 	PackedVector3Array gradient_points = _brush_data["gradient_points"];
-	bool alt_mode = _brush_data["alt_mode"];
 
 	real_t randf = UtilityFunctions::randf();
 	real_t rot = randf * Math_PI * real_t(_brush_data["jitter"]);
@@ -161,10 +165,10 @@ void Terrain3DEditor::_operate_map(const Vector3 &p_global_position, const real_
 	edited_area.size = Vector3(brush_size, 0.f, brush_size);
 
 	if (_tool == INSTANCER) {
-		if (_operation == ADD) {
-			_terrain->get_instancer()->add_instances(p_global_position, _brush_data);
-		} else {
+		if (modifier_ctrl) {
 			_terrain->get_instancer()->remove_instances(p_global_position, _brush_data);
+		} else {
+			_terrain->get_instancer()->add_instances(p_global_position, _brush_data);
 		}
 		return;
 	}
@@ -227,7 +231,7 @@ void Terrain3DEditor::_operate_map(const Vector3 &p_global_position, const real_
 						if (_tool == HEIGHT) {
 							// Height
 							destf = Math::lerp(srcf, height, CLAMP(brush_alpha * strength * .5f, 0.f, .15f));
-						} else if (alt_mode && !std::isnan(p_global_position.y)) {
+						} else if (modifier_alt && !std::isnan(p_global_position.y)) {
 							// Lift troughs
 							real_t brush_center_y = p_global_position.y + brush_alpha * strength;
 							destf = Math::clamp(brush_center_y, srcf, srcf + brush_alpha * strength);
@@ -241,7 +245,7 @@ void Terrain3DEditor::_operate_map(const Vector3 &p_global_position, const real_
 						if (_tool == HEIGHT) {
 							// Height at 0
 							destf = Math::lerp(srcf, 0.f, CLAMP(brush_alpha * strength * .5f, 0.f, .15f));
-						} else if (alt_mode && !std::isnan(p_global_position.y)) {
+						} else if (modifier_alt && !std::isnan(p_global_position.y)) {
 							// Flatten peaks
 							real_t brush_center_y = p_global_position.y - brush_alpha * strength;
 							destf = Math::clamp(brush_center_y, srcf - brush_alpha * strength, srcf);
@@ -311,7 +315,7 @@ void Terrain3DEditor::_operate_map(const Vector3 &p_global_position, const real_
 				edited_area = edited_area.expand(edited_position);
 
 			} else if (map_type == TYPE_CONTROL) {
-				// Get bit field from pixel
+				// Get current bit field from pixel
 				uint32_t base_id = get_base(src.r);
 				uint32_t overlay_id = get_overlay(src.r);
 				real_t blend = real_t(get_blend(src.r)) / 255.f;
@@ -320,7 +324,6 @@ void Terrain3DEditor::_operate_map(const Vector3 &p_global_position, const real_
 				bool hole = is_hole(src.r);
 				bool navigation = is_nav(src.r);
 				bool autoshader = is_auto(src.r);
-
 				real_t alpha_clip = (brush_alpha > 0.5f) ? 1.f : 0.f;
 				// Lookup to shift values saved to control map so that 0 (default) is the first entry
 				// Shader scale array is aligned to match this.
@@ -328,6 +331,9 @@ void Terrain3DEditor::_operate_map(const Vector3 &p_global_position, const real_
 
 				switch (_tool) {
 					case TEXTURE: {
+						if (!data->is_in_slope(brush_global_position, slope_range, modifier_alt)) {
+							continue;
+						}
 						switch (_operation) {
 							// Base Paint
 							case REPLACE: {
@@ -443,37 +449,37 @@ void Terrain3DEditor::_operate_map(const Vector3 &p_global_position, const real_
 
 			} else if (map_type == TYPE_COLOR) {
 				// Filter by visible texture
-				bool can_write = true;
 				if (enable_texture) {
 					Ref<Image> map = region->get_map(TYPE_CONTROL);
 					real_t src_ctrl = map->get_pixelv(map_pixel_position).r;
 					int tex_id = (get_blend(src_ctrl) > 110 + int(_brush_data.get("margin", 0))) ? get_overlay(src_ctrl) : get_base(src_ctrl);
 					if (tex_id != asset_id) {
-						can_write = false;
+						continue;
 					}
 				}
-				if (can_write) {
-					switch (_tool) {
-						case COLOR:
-							dest = src.lerp((_operation == ADD) ? color : COLOR_WHITE, brush_alpha * strength);
-							dest.a = src.a;
-							break;
-						case ROUGHNESS:
-							/* Roughness received from UI is -100 to 100. Changed to 0,1 before storing.
-							 * To convert 0,1 back to -100,100 use: 200 * (color.a - 0.5)
-							 * However Godot stores values as 8-bit ints. Roundtrip is = int(a*255)/255.0
-							 * Roughness 0 is saved as 0.5, but retreived is 0.498, or -0.4 roughness
-							 * We round the final amount in tool_settings.gd:_on_picked().
-							 */
-							if (_operation == ADD) {
-								dest.a = Math::lerp(real_t(src.a), real_t(.5f + .5f * roughness), brush_alpha * strength);
-							} else {
-								dest.a = Math::lerp(real_t(src.a), real_t(.5f + .5f * 0.5f), brush_alpha * strength);
-							}
-							break;
-						default:
-							break;
-					}
+				if (!data->is_in_slope(brush_global_position, slope_range, modifier_alt)) {
+					continue;
+				}
+				switch (_tool) {
+					case COLOR:
+						dest = src.lerp((_operation == ADD) ? color : COLOR_WHITE, brush_alpha * strength);
+						dest.a = src.a;
+						break;
+					case ROUGHNESS:
+						/* Roughness received from UI is -100 to 100. Changed to 0,1 before storing.
+						 * To convert 0,1 back to -100,100 use: 200 * (color.a - 0.5)
+						 * However Godot stores values as 8-bit ints. Roundtrip is = int(a*255)/255.0
+						 * Roughness 0 is saved as 0.5, but retreived is 0.498, or -0.4 roughness
+						 * We round the final amount in tool_settings.gd:_on_picked().
+						 */
+						if (_operation == ADD) {
+							dest.a = Math::lerp(real_t(src.a), real_t(.5f + .5f * roughness), brush_alpha * strength);
+						} else {
+							dest.a = Math::lerp(real_t(src.a), real_t(.5f + .5f * 0.5f), brush_alpha * strength);
+						}
+						break;
+					default:
+						break;
 				}
 			}
 			backup_region(region);
@@ -659,6 +665,10 @@ void Terrain3DEditor::set_brush_data(const Dictionary &p_data) {
 	_brush_data["size"] = CLAMP(real_t(p_data.get("size", 10.f)), 0.1f, 4096.f); // Diameter in meters
 	_brush_data["strength"] = CLAMP(real_t(p_data.get("strength", .1f)) * .01f, .01f, 1000.f); // 1-100k% (max of 1000m per click)
 	// mouse_pressure injected in editor.gd and sanitized in _operate_map()
+	Vector2 slope = p_data.get("slope", V2_ZERO);
+	slope.x = CLAMP(slope.x, 0.f, 90.f);
+	slope.y = CLAMP(slope.y, 0.f, 90.f);
+	_brush_data["slope"] = slope; // 0-90 (degrees)
 	_brush_data["height"] = CLAMP(real_t(p_data.get("height", 0.f)), -65536.f, 65536.f); // Meters
 	Color col = p_data.get("color", COLOR_ROUGHNESS);
 	col.r = CLAMP(col.r, 0.f, 5.f);

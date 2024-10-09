@@ -157,7 +157,7 @@ public:
 	real_t get_control_blend(const Vector3 &p_global_position) const;
 	void set_control_angle(const Vector3 &p_global_position, const real_t p_angle);
 	real_t get_control_angle(const Vector3 &p_global_position) const;
-	void  set_control_scale(const Vector3 &p_global_position, const real_t p_scale);
+	void set_control_scale(const Vector3 &p_global_position, const real_t p_scale);
 	real_t get_control_scale(const Vector3 &p_global_position) const;
 	void set_control_hole(const Vector3 &p_global_position, const bool p_hole);
 	bool get_control_hole(const Vector3 &p_global_position) const;
@@ -166,7 +166,8 @@ public:
 	void set_control_auto(const Vector3 &p_global_position, const bool p_auto);
 	bool get_control_auto(const Vector3 &p_global_position) const;
 
-	Vector3 get_normal(const Vector3 &global_position) const;
+	Vector3 get_normal(const Vector3 &p_global_position) const;
+	bool is_in_slope(const Vector3 &p_global_position, const Vector2 &p_slope_range, const bool p_invert = false) const;
 	Vector3 get_texture_id(const Vector3 &p_global_position) const;
 	Vector3 get_mesh_vertex(const int32_t p_lod, const HeightFilter p_filter, const Vector3 &p_global_position) const;
 
